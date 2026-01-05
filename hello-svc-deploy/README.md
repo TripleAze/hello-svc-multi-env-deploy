@@ -1,6 +1,8 @@
-# Hello-SVC Deployment with Custom Domain & SSL
+# Hello-SVC Deployment with Custom Domain & SSL (Single Server)
 
 ## Architecture Overview
+
+This deployment uses **a single EC2 server**. The application environment (**production or staging**) is controlled via an **environment variable**, not separate servers.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -8,32 +10,29 @@
 │                    (yourdomain.com with SSL)                     │
 └───────────────────────────┬─────────────────────────────────────┘
                             │
-                            │ DNS A Records
+                            │ DNS A Record
                             │
-        ┌───────────────────┴───────────────────┐
-        │                                       │
-        ▼                                       ▼
-┌───────────────────┐                 ┌───────────────────┐
-│  production       │                 │  staging          │
-│  .yourdomain.com  │                 │  .yourdomain.com  │
-│                   │                 │                   │
-│  EC2 Instance     │                 │  EC2 Instance     │
-│  52.23.45.67      │                 │  54.89.12.34      │
-│                   │                 │                   │
-│  ┌─────────────┐  │                 │  ┌─────────────┐  │
-│  │   Nginx     │  │                 │  │   Nginx     │  │
-│  │ (SSL:443)   │  │                 │  │ (SSL:443)   │  │
-│  │ (HTTP:80)   │  │                 │  │ (HTTP:80)   │  │
-│  └──────┬──────┘  │                 │  └──────┬──────┘  │
-│         │         │                 │         │         │
-│         ▼         │                 │         ▼         │
-│  ┌─────────────┐  │                 │  ┌─────────────┐  │
-│  │  hello-svc  │  │                 │  │  hello-svc  │  │
-│  │  (Docker)   │  │                 │  │  (Docker)   │  │
-│  │  ENV=prod   │  │                 │  │  ENV=stg    │  │
-│  │  Port 8080  │  │                 │  │  Port 8080  │  │
-│  └─────────────┘  │                 │  └─────────────┘  │
-└───────────────────┘                 └───────────────────┘
+                            ▼
+                   ┌───────────────────┐
+                   │   EC2 Instance    │
+                   │   Single Server   │
+                   │   52.23.45.67     │
+                   │                   │
+                   │  ┌─────────────┐  │
+                   │  │   Nginx     │  │
+                   │  │ (SSL:443)   │  │
+                   │  │ (HTTP:80)   │  │
+                   │  └──────┬──────┘  │
+                   │         │         │
+                   │         ▼         │
+                   │  ┌─────────────┐  │
+                   │  │  hello-svc  │  │
+                   │  │  (Docker)   │  │
+                   │  │  ENV=prod   │  │
+                   │  │  or ENV=stg │  │
+                   │  │  Port 8080  │  │
+                   │  └─────────────┘  │
+                   └───────────────────┘
 ```
 
 ---
@@ -65,24 +64,27 @@ hello-svc-deploy/
 
 ## Prerequisites
 
-✅ Domain purchased and configured (e.g., yourdomain.com)
-✅ SSL certificate (either already installed or we'll use existing)
-✅ AWS account with credentials configured
-✅ Terraform installed locally
-✅ SSH key pair created in AWS
+* Domain configured and pointing to the EC2 instance (e.g., `yourdomain.com`)
+* SSL certificate installed via Let’s Encrypt (Certbot)
+* AWS account with credentials configured
+* Terraform installed locally
+* SSH key pair created in AWS
 
 ---
 
 ## Step 1: Configure DNS Records
 
-Add these A records to your domain's DNS:
+Add **one A record** to your domain DNS:
 
 ```
-production.yourdomain.com   →   52.23.45.67 (Production EC2 IP)
-staging.yourdomain.com      →   54.89.12.34 (Staging EC2 IP)
+yourdomain.com   →   52.23.45.67 (EC2 Public IP)
 ```
 
-**Note:** We'll get these IPs after Terraform creates the instances.
+Optional (if you prefer subdomains):
+
+```
+app.yourdomain.com → 52.23.45.67
+```
 
 ---
 
@@ -96,45 +98,66 @@ terraform plan
 terraform apply
 ```
 
-Note the output IPs for the next step.
+Terraform provisions **one EC2 instance** and outputs:
+
+* Public IP
+* Application URL
+* SSH command
 
 ---
 
 ## Step 3: Instance Setup
 
-Terraform will automatically run the `scripts/setup-instance.sh` script via `user_data`, which installs Docker, Nginx, and essential tools.
+Terraform runs `scripts/setup-instance.sh` via `user_data`, which:
+
+* Installs Docker
+* Installs NGINX
+* Installs Certbot (Let’s Encrypt)
+* Prepares the host for application deployment
 
 ---
 
 ## Step 4: Application Deployment
 
-Use the deployment script to deploy to your environments.
+Deployment targets **the same server**, changing only the environment variable.
 
-**Production:**
+### Deploy Production
+
 ```bash
-# Get production IP
-PROD_IP=$(terraform output -raw production_ip)
-
-# Deploy
-# Deploy
-ssh ubuntu@$PROD_IP "cd /opt/hello-svc && sudo ./scripts/deploy-app.sh production production.yourdomain.com"
+APP_IP=$(terraform output -raw app_ip)
+ssh ubuntu@$APP_IP "cd /opt/hello-svc && sudo ./scripts/deploy-app.sh production yourdomain.com"
 ```
 
-**Staging:**
-```bash
-# Get staging IP
-STG_IP=$(terraform output -raw staging_ip)
+### Deploy Staging (Same Server)
 
-# Deploy
-# Deploy
-ssh ubuntu@$STG_IP "cd /opt/hello-svc && sudo ./scripts/deploy-app.sh staging staging.yourdomain.com"
+```bash
+APP_IP=$(terraform output -raw app_ip)
+ssh ubuntu@$APP_IP "cd /opt/hello-svc && sudo ./scripts/deploy-app.sh staging yourdomain.com"
 ```
 
-(Note: You may need to copy the repo first or clone it as per the instructions in the `setup-instance.sh` script).
+The script restarts the container with the appropriate environment variable.
 
 ---
 
 ## Step 5: Verification
 
-- `curl https://production.yourdomain.com` -> "Hello! I am running in production."
-- `curl https://staging.yourdomain.com` -> "Hello! I am running in staging."
+```bash
+curl https://yourdomain.com
+```
+
+Expected responses:
+
+* **Production:** `Hello! I am running in production.`
+* **Staging:** `Hello! I am running in staging.`
+
+---
+
+## Key Design Decisions
+
+* Single EC2 instance
+* Environment-based deployment (no duplicate infrastructure)
+* NGINX handles SSL termination and reverse proxying
+* Dockerized Go application
+* Let’s Encrypt for free, trusted HTTPS
+
+---
