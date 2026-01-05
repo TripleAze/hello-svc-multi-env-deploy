@@ -56,7 +56,6 @@ hello-svc-deploy/
 │   └── docker-compose.yml
 ├── hello-svc/
 │   ├── main.go
-│   └── go.mod
 └── README.md
 ```
 
