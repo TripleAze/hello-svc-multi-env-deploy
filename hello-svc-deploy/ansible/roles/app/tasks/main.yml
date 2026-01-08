@@ -1,0 +1,46 @@
+---
+- name: Create app directory
+  file:
+    path: /opt/hello-svc
+    state: directory
+    owner: ubuntu
+    group: ubuntu
+    mode: '0755'
+
+- name: Copy application source
+  copy:
+    src: ../../../hello-svc/
+    dest: /opt/hello-svc/
+    owner: ubuntu
+    group: ubuntu
+    mode: '0755'
+
+- name: Build Docker image
+  docker_image:
+    name: hello-svc
+    build:
+      path: /opt/hello-svc
+    source: build
+    force_source: yes
+
+- name: Run Production Container (Port 8080)
+  docker_container:
+    name: hello-prod
+    image: hello-svc
+    state: started
+    restart_policy: always
+    ports:
+      - "8080:8080"
+    env:
+      ENV: production
+
+- name: Run Staging Container (Port 8081)
+  docker_container:
+    name: hello-staging
+    image: hello-svc
+    state: started
+    restart_policy: always
+    ports:
+      - "8081:8080"
+    env:
+      ENV: staging

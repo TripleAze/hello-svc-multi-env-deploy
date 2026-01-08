@@ -1,0 +1,23 @@
+---
+- name: Install Certbot and Nginx plugin
+  apt:
+    name:
+      - certbot
+      - python3-certbot-nginx
+    state: present
+
+- name: Check if certificates exist
+  stat:
+    path: /etc/letsencrypt/live/{{ production_domain }}/fullchain.pem
+  register: cert_check
+
+- name: Request Certificates (Dry Run for safety, remove --dry-run for real)
+  command: >
+    certbot --nginx
+    -d {{ production_domain }}
+    -d {{ staging_domain }}
+    --non-interactive
+    --agree-tos
+    --email {{ cert_email | default('admin@example.com') }}
+    --redirect
+  when: not cert_check.stat.exists and enable_ssl | default(false) | bool

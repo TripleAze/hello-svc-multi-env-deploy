@@ -12,6 +12,22 @@ provider "aws" {
   region = var.aws_region
 }
 
+data "aws_ami" "ubuntu" {
+  most_recent = true
+
+  filter {
+    name   = "name"
+    values = ["ubuntu/images/hvm-ssd/ubuntu-jammy-22.04-amd64-server-*"]
+  }
+
+  filter {
+    name   = "virtualization-type"
+    values = ["hvm"]
+  }
+
+  owners = ["099720109477"] # Canonical
+}
+
 # VPC Configuration
 resource "aws_vpc" "main" {
   cidr_block           = "10.0.0.0/16"
@@ -60,6 +76,7 @@ resource "aws_route_table_association" "public" {
   route_table_id = aws_route_table.public.id
 }
 
+
 # Security Group
 resource "aws_security_group" "hello_svc" {
   name        = "hello-svc-sg"
@@ -90,7 +107,24 @@ resource "aws_security_group" "hello_svc" {
     from_port   = 22
     to_port     = 22
     protocol    = "tcp"
-    cidr_blocks = ["102.215.57.40/32"]
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  # App Ports (Prod & Staging)
+  ingress {
+    description = "App Prod"
+    from_port   = 8080
+    to_port     = 8080
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "App Staging"
+    from_port   = 8081
+    to_port     = 8081
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
   }
 
   egress {
@@ -105,67 +139,43 @@ resource "aws_security_group" "hello_svc" {
   }
 }
 
-# Production Instance
-resource "aws_instance" "production" {
-  ami                    = var.ami_id
-  instance_type          = "t3.micro"
+# Main App Instance
+resource "aws_instance" "app_server" {
+  ami                    = data.aws_ami.ubuntu.id
+  instance_type          = "t3.small" 
   subnet_id              = aws_subnet.public.id
   vpc_security_group_ids = [aws_security_group.hello_svc.id]
   key_name               = var.key_name
 
-  user_data = templatefile("${path.module}/../scripts/setup-instance.sh", {
-    environment = "production"
-    domain      = "production.${var.domain_name}"
-  })
+  user_data = <<-EOF
+              #!/bin/bash
+              hostnamectl set-hostname app-server
+              EOF
 
   root_block_device {
     volume_size = 20
   }
 
   tags = {
-    Name        = "production-hello-svc"
+    Name        = "hello-svc-server"
     Environment = "production"
   }
 }
 
-# Staging Instance
-resource "aws_instance" "staging" {
-  ami                    = var.ami_id
-  instance_type          = "t3.micro"
-  subnet_id              = aws_subnet.public.id
-  vpc_security_group_ids = [aws_security_group.hello_svc.id]
-  key_name               = var.key_name
-
-  user_data = templatefile("${path.module}/../scripts/setup-instance.sh", {
-    environment = "staging"
-    domain      = "staging.${var.domain_name}"
-  })
-
-  root_block_device {
-    volume_size = 20
-  }
+resource "aws_eip" "app_eip" {
+  domain = "vpc"
 
   tags = {
-    Name        = "staging-hello-svc"
-    Environment = "staging"
+    Name = "hello-svc-eip"
   }
 }
 
-# CloudWatch Log Groups
-resource "aws_cloudwatch_log_group" "production" {
-  name              = "/aws/ec2/production-hello-svc"
-  retention_in_days = 7
-
-  tags = {
-    Environment = "production"
-  }
+resource "aws_eip_association" "app_eip_assoc" {
+  instance_id   = aws_instance.app_server.id
+  allocation_id = aws_eip.app_eip.id
 }
 
-resource "aws_cloudwatch_log_group" "staging" {
-  name              = "/aws/ec2/staging-hello-svc"
-  retention_in_days = 7
-
-  tags = {
-    Environment = "staging"
-  }
+output "instance_public_ip" {
+  description = "Public IP of the App Server"
+  value       = aws_eip.app_eip.public_ip
 }

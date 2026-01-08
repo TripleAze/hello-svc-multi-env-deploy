@@ -7,7 +7,7 @@ variable "aws_region" {
 variable "domain_name" {
   description = "Base domain name"
   type        = string
-  default     = "abu-app.chickenkiller.com"
+  default     = "chickenkiller.com"
 }
 
 variable "key_name" {
@@ -24,11 +24,11 @@ variable "ami_id" {
 variable "ssl_cert_path" {
   description = "Path to SSL certificate on local machine"
   type        = string
-  default     = "/etc/letsencrypt/live/abu-app.chickenkiller.com/fullchain.pem"
+  default     = "/etc/letsencrypt/live/chickenkiller.com/fullchain.pem"
 }
 
 variable "ssl_key_path" {
   description = "Path to SSL private key on local machine"
   type        = string
-  default     = "/etc/letsencrypt/live/abu-app.chickenkiller.com/privkey.pem"
+  default     = "/etc/letsencrypt/live/abu-production.chickenkiller.com/privkey.pem"
 }

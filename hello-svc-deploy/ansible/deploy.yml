@@ -1,0 +1,14 @@
+---
+- name: Deploy Hello Service
+  hosts: app_servers
+  become: yes
+  vars:
+  
+    production_domain: "abu-production.chickenkiller.com"
+    staging_domain:    "abu-staging.chickenkiller.com"
+
+  roles:
+    - common
+    - app
+    - nginx
+    - certbot

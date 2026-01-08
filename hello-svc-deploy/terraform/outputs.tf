@@ -1,35 +1,19 @@
-output "production_ip" {
-  description = "Production instance public IP"
-  value       = aws_instance.production.public_ip
-}
-
-output "staging_ip" {
-  description = "Staging instance public IP"
-  value       = aws_instance.staging.public_ip
+output "app_server_ip" {
+  description = "App Server public IP"
+  value       = aws_eip.app_eip.public_ip
 }
 
 output "production_url" {
   description = "Production URL"
-  value       = "https://production.${var.domain_name}"
+  value       = "https://abu-production.${var.domain_name}"
 }
 
 output "staging_url" {
   description = "Staging URL"
-  value       = "https://staging.${var.domain_name}"
-}
-output "app_url" {
-  description = "URL to access your app"
-  value       = "https://production.${var.domain_name}"
-}
-output "staging_app_url" {
-  description = "URL to access your app"
-  value       = "https://staging.${var.domain_name}"
+  value       = "https://abu-staging.${var.domain_name}"
 }
 
-output "ssh_commands" {
-  description = "SSH commands to access instances"
-  value = <<-EOT
-    Production: ssh ubuntu@${aws_instance.production.public_ip}
-    Staging:    ssh ubuntu@${aws_instance.staging.public_ip}
-  EOT
+output "ssh_command" {
+  description = "SSH command to access instance"
+  value       = "ssh ubuntu@${aws_eip.app_eip.public_ip}"
 }

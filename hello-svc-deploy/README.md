@@ -1,13 +1,16 @@
-# Hello-SVC Deployment with Custom Domain & SSL (Single Server)
+# Hello-SVC Deployment (Terraform + Ansible)
 
-## Architecture Overview
+A basic Go program that responds to requests with an environment variable templated into the response, deployed to AWS using a modern Infrastructure-as-Code (IaC) and Configuration Management workflow.
 
-This deployment uses **a single EC2 server**. The application environment (**production or staging**) is controlled via an **environment variable**, not separate servers.
+## Architecture Documentation
+
+This deployment uses a **Single EC2 Server** hosting both Production and Staging containers as separate Docker processes, proxied via Nginx.
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                         Your Domain                              │
-│                    (yourdomain.com with SSL)                     │
+│         (abu-production.chickenkiller.com with SSL)              │
+│         (abu-staging.chickenkiller.com with SSL)                 │
 └───────────────────────────┬─────────────────────────────────────┘
                             │
                             │ DNS A Record
@@ -15,23 +18,20 @@ This deployment uses **a single EC2 server**. The application environment (**pro
                             ▼
                    ┌───────────────────┐
                    │   EC2 Instance    │
-                   │   Single Server   │
-                   │   52.23.45.67     │
+                   │   Elastic IP      │
                    │                   │
                    │  ┌─────────────┐  │
                    │  │   Nginx     │  │
-                   │  │ (SSL:443)   │  │
-                   │  │ (HTTP:80)   │  │
+                   │  │ (Reverse    │  │
+                   │  │  Proxy)     │  │
                    │  └──────┬──────┘  │
                    │         │         │
-                   │         ▼         │
-                   │  ┌─────────────┐  │
-                   │  │  hello-svc  │  │
-                   │  │  (Docker)   │  │
-                   │  │  ENV=prod   │  │
-                   │  │  or ENV=stg │  │
-                   │  │  Port 8080  │  │
-                   │  └─────────────┘  │
+                   │    ┌────┴────┐    │
+                   │    ▼         ▼    │
+                   │ ┌───────┐ ┌───────┐ │
+                   │ │ Prod  │ │ Stg   │ │
+                   │ │(8080) │ │(8081) │ │
+                   │ └───────┘ └───────┘ │
                    └───────────────────┘
 ```
 
@@ -41,122 +41,54 @@ This deployment uses **a single EC2 server**. The application environment (**pro
 
 ```
 hello-svc-deploy/
-├── terraform/
-│   ├── main.tf
-│   ├── variables.tf
-│   ├── outputs.tf
-│   └── terraform.tfvars
-├── scripts/
-│   ├── setup-instance.sh
-│   └── deploy-app.sh
-├── nginx/
-│   └── nginx.conf.template
-├── docker/
-│   ├── Dockerfile
-│   └── docker-compose.yml
-├── hello-svc/
-│   ├── main.go
+├── terraform/          # Infrastructure provisioning
+├── ansible/            # Server configuration & deployment
+├── hello-svc/          # Application source code
 └── README.md
 ```
 
 ---
 
-## Prerequisites
+## Building and Running Locally
 
-* Domain configured and pointing to the EC2 instance (e.g., `yourdomain.com`)
-* SSL certificate installed via Let’s Encrypt (Certbot)
-* AWS account with credentials configured
-* Terraform installed locally
-* SSH key pair created in AWS
-
----
-
-## Step 1: Configure DNS Records
-
-Add **one A record** to your domain DNS:
-
-```
-yourdomain.com   →   52.23.45.67 (EC2 Public IP)
+### 1. Build and Run Directly
+```bash
+cd hello-svc
+go run main.go
 ```
 
-Optional (if you prefer subdomains):
-
-```
-app.yourdomain.com → 52.23.45.67
+### 2. With Docker
+```bash
+docker build -t hello-svc ./hello-svc
+docker run -e "ENV=production" -p 8080:8080 hello-svc
 ```
 
 ---
 
-## Step 2: Terraform Configuration
+## Deployment Steps
 
-Run the following commands in the `terraform/` directory:
-
+### Step 1: Terraform Configuration
+Run these in the `terraform/` directory to provision the EC2 instance and Elastic IP:
 ```bash
 terraform init
-terraform plan
 terraform apply
 ```
 
-Terraform provisions **one EC2 instance** and outputs:
-
-* Public IP
-* Application URL
-* SSH command
-
----
-
-## Step 3: Instance Setup
-
-Terraform runs `scripts/setup-instance.sh` via `user_data`, which:
-
-* Installs Docker
-* Installs NGINX
-* Installs Certbot (Let’s Encrypt)
-* Prepares the host for application deployment
-
----
-
-## Step 4: Application Deployment
-
-Deployment targets **the same server**, changing only the environment variable.
-
-### Deploy Production
-
+### Step 2: Ansible Deployment
+Navigate to the `ansible/` directory. Ensure your SSH key is available and subdomains point to the Elastic IP.
 ```bash
-APP_IP=$(terraform output -raw app_ip)
-ssh ubuntu@$APP_IP "cd /opt/hello-svc && sudo ./scripts/deploy-app.sh production yourdomain.com"
+ansible-playbook -i inventory/hosts.ini deploy.yml
 ```
-
-### Deploy Staging (Same Server)
-
-```bash
-APP_IP=$(terraform output -raw app_ip)
-ssh ubuntu@$APP_IP "cd /opt/hello-svc && sudo ./scripts/deploy-app.sh staging yourdomain.com"
-```
-
-The script restarts the container with the appropriate environment variable.
-
----
-
-## Step 5: Verification
-
-```bash
-curl https://yourdomain.com
-```
-
-Expected responses:
-
-* **Production:** `Hello! I am running in production.`
-* **Staging:** `Hello! I am running in staging.`
+This playbook installs:
+* Docker & Pip
+* Certbot (for SSL)
+* Nginx (Reverse Proxy)
+* Production and Staging containers
 
 ---
 
 ## Key Design Decisions
-
-* Single EC2 instance
-* Environment-based deployment (no duplicate infrastructure)
-* NGINX handles SSL termination and reverse proxying
-* Dockerized Go application
-* Let’s Encrypt for free, trusted HTTPS
-
----
+* **Single EC2 Instance**: Cost-efficient for small deployments.
+* **Elastic IP**: Permanent static IP managed by Terraform.
+* **Ansible Roles**: Modular configuration for `common`, `app`, `nginx`, and `certbot`.
+* **Nginx Reverse Proxy**: Directs traffic based on hostname to the correct container.
