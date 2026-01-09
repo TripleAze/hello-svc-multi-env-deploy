@@ -8,7 +8,7 @@ This deployment uses a **Single EC2 Server** hosting both Production and Staging
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                         Your Domain                              │
+│                          Domain                                  │
 │         (abu-production.chickenkiller.com with SSL)              │
 │         (abu-staging.chickenkiller.com with SSL)                 │
 └───────────────────────────┬─────────────────────────────────────┘
