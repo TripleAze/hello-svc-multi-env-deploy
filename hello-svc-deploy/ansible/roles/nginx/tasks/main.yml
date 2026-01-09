@@ -28,9 +28,14 @@
     state: started
     enabled: yes
 
+- name: Allow OpenSSH in UFW
+  ufw:
+    rule: allow
+    name: OpenSSH
+
 - name: Allow Nginx HTTP/HTTPS in UFW
   ufw:
     rule: allow
     name: 'Nginx Full'
     state: enabled
-  ignore_errors: yes  # Ignore if UFW is not installed/active
+  ignore_errors: yes  
